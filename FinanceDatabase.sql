@@ -1,81 +1,72 @@
 CREATE DATABASE IF NOT EXISTS FinanceApp;
 USE FinanceApp;
 
-CREATE TABLE IF NOT EXISTS User(
-user_id INT PRIMARY KEY,
-user_type ENUM('individual', 'company'),
-email VARCHAR(255),
-password_hash VARCHAR(255),
-phoneNumber BIGINT,
-kyc_status ENUM('pending', 'verified', 'rejected'),
-created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-last_login_at DATETIME DEFAULT NULL
+CREATE TABLE IF NOT EXISTS User_Profile (
+    user_id INT PRIMARY KEY AUTO_INCREMENT,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    phone_number BIGINT UNIQUE NOT NULL,
+    user_type ENUM('MSME', 'LENDER_PARTNER') NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-
-CREATE TABLE IF NOT EXISTS KYC_Document(
-kyc_id INT PRIMARY KEY ,
-user_id INT,
-FOREIGN KEY (user_id) REFERENCES User(user_id) ON DELETE CASCADE,
-document_type ENUM('aadhar', 'pan', 'gst', 'incorporation_certificate'),
-document_url VARCHAR(255),
-verification_status ENUM('pending', 'verified', 'rejected'),
-verified_at DATETIME
+CREATE TABLE IF NOT EXISTS KYC_Data (
+    kyc_id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT,
+    FOREIGN KEY (user_id) REFERENCES User_Profile(user_id) ON DELETE CASCADE,
+    pan_number VARCHAR(10) UNIQUE,
+    business_name VARCHAR(255),
+    udyam_number VARCHAR(50),
+    verification_status ENUM('PENDING', 'VERIFIED', 'REJECTED') DEFAULT 'PENDING'
 );
 
-CREATE TABLE IF NOT EXISTS Wallet(
-wallet_id INT PRIMARY KEY,
-user_id INT,
-FOREIGN KEY (user_id) REFERENCES User(user_id) ON DELETE CASCADE,
-balance DECIMAL,
-currency VARCHAR(255),
-created_at DATETIME,
-updated_at DATETIME
+/* This is important' */
+CREATE TABLE IF NOT EXISTS Financial_Data_Store (
+    data_id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT,
+    FOREIGN KEY (user_id) REFERENCES User_Profile(user_id) ON DELETE CASCADE,
+    data_source ENUM('ACCOUNT_AGGREGATOR', 'GSTN', 'UPI_PARSE') NOT NULL,
+    raw_data JSON, /* Store the raw, encrypted JSON payload */
+    consent_handle VARCHAR(255), /* Store the AA consent ID */
+    fetched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    data_start_date DATE,
+    data_end_date DATE
 );
 
-CREATE TABLE IF NOT EXISTS Loan_Request(
-loan_id INT PRIMARY KEY,
-borrower_id INT,
-FOREIGN KEY (borrower_id) REFERENCES User(user_id) ON DELETE CASCADE,
-loan_amount DECIMAL,
-interest_rate DECIMAL,
-tenure_months int,
-purpose VARCHAR(255),
-status ENUM('open','funded','active', 'close', 'defaulted'),
-created_at DATETIME
+/* This is the output of our AI model */
+CREATE TABLE IF NOT EXISTS AI_Risk_Score (
+    score_id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT,
+    FOREIGN KEY (user_id) REFERENCES User_Profile(user_id) ON DELETE CASCADE,
+    score DECIMAL(5, 2), /* Our internal credit score */
+    risk_level ENUM('LOW', 'MEDIUM', 'HIGH'),
+    summary_report JSON, /* avg daily balance, GST compliance %, etc. */
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS Wallet_Transaction(
-tansaction_id INT PRIMARY KEY,
-wallet_id INT,
-FOREIGN KEY (wallet_id) REFERENCES Wallet(wallet_id) ON DELETE RESTRICT,
-type ENUM('deposit','withdrawal','lending', 'repayment','interest','free'),
-amount DECIMAL,
-status ENUM('pending','completed','failed'),
-reference_id VARCHAR(255),
-created_at DATETIME
+CREATE TABLE IF NOT EXISTS Loan_Application (
+    application_id INT PRIMARY KEY AUTO_INCREMENT,
+    msme_user_id INT,
+    FOREIGN KEY (msme_user_id) REFERENCES User_Profile(user_id) ON DELETE CASCADE,
+    requested_amount DECIMAL(12, 2) NOT NULL,
+    requested_tenure_months INT NOT NULL,
+    purpose VARCHAR(255),
+    status ENUM('DRAFT', 'PENDING_DATA', 'IN_REVIEW', 'OFFERS_AVAILABLE', 'REJECTED', 'LOAN_ACCEPTED') NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS Repayment_Schedule(
-repayment_id INT PRIMARY KEY,
-loan_id INT,
-FOREIGN KEY (loan_id) REFERENCES Loan_Request(loan_id) ON DELETE CASCADE,
-due_date DATE,
-amount_due DECIMAL,
-amount_paid DECIMAL,
-payment_status ENUM('pending', 'paid', 'late','defaulted'),
-paid_at DATETIME 
-);
-
-CREATE TABLE IF NOT EXISTS Loan_Investment(
-investment_id INT PRIMARY KEY,
-loan_id INT,
-FOREIGN KEY (loan_id) REFERENCES Loan_Request(loan_id) ON DELETE SET NULL,
-lender_id INT,
-FOREIGN KEY (lender_id) REFERENCES User(user_id) ON DELETE SET NULL,
-amount_invested DECIMAL,
-expected_return DECIMAL,
-interest_rate DECIMAL,
-repayment_status ENUM('pending','in progress', 'completed'),
-created_at DATETIME
+/*  Core of our platform */
+CREATE TABLE IF NOT EXISTS Loan_Offer (
+    offer_id INT PRIMARY KEY AUTO_INCREMENT,
+    application_id INT,
+    FOREIGN KEY (application_id) REFERENCES Loan_Application(application_id) ON DELETE CASCADE,
+    lender_user_id INT, /* The ID of the NBFC partner */
+    FOREIGN KEY (lender_user_id) REFERENCES User_Profile(user_id) ON DELETE CASCADE,
+    
+    offer_amount DECIMAL(12, 2) NOT NULL,
+    interest_rate DECIMAL(5, 2) NOT NULL,
+    tenure_months INT NOT NULL,
+    processing_fee DECIMAL(10, 2),
+    status ENUM('PENDING', 'ACCEPTED_BY_MSME', 'REJECTED_BY_MSME', 'WITHDRAWN_BY_LENDER'),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
